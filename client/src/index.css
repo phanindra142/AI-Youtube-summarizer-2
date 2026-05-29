@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
+  --color-primary: #ef4444; /* red-500 */
+  --color-primary-dark: #dc2626; /* red-600 */
+  --color-primary-light: #f87171; /* red-400 */
+  --color-background-dark: #09090b; /* zinc-950 */
+  --color-card-dark: #18181b; /* zinc-900 */
+}
+
+/* =========================================
+   THEME DESIGN TOKENS
+   ========================================= */
+.theme-dark {
+  --color-bg-canvas: #000000;
+  --color-bg-sidebar: #09090b;
+  --color-bg-panel: #0d0d0f;
+  --color-border-main: rgba(39, 39, 42, 0.6);
+  --color-border-card: rgba(63, 63, 70, 0.4);
+  --color-card-fill: rgba(24, 24, 27, 0.55);
+  --color-text-title: #ffffff;
+  --color-text-body: #d4d4d8; /* zinc-300 */
+  --color-text-muted: #71717a; /* zinc-500 */
+  --color-input-bg: #09090b;
+  --color-input-border: #27272a;
+  --color-selection: rgba(239, 68, 68, 0.25);
+  --color-accent-dim: rgba(239, 68, 68, 0.08);
+}
+
+.theme-light {
+  --color-bg-canvas: #f8fafc; /* light slate base */
+  --color-bg-sidebar: #ffffff; /* solid white sidebar */
+  --color-bg-panel: #f1f5f9; /* soft gray panel */
+  --color-border-main: rgba(226, 232, 240, 0.9);
+  --color-border-card: rgba(203, 213, 225, 0.5);
+  --color-card-fill: rgba(255, 255, 255, 0.85);
+  --color-text-title: #0f172a; /* deep slate-900 */
+  --color-text-body: #334155; /* slate-700 */
+  --color-text-muted: #64748b; /* slate-500 */
+  --color-input-bg: #ffffff;
+  --color-input-border: #cbd5e1;
+  --color-selection: rgba(239, 68, 68, 0.15);
+  --color-accent-dim: rgba(239, 68, 68, 0.04);
+}
+
+/* Apply Standard Normalization & Smooth Typography */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Custom Scrollbar styled for both Webkit and Gecko-Firefox engines */
+.theme-dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.theme-dark ::-webkit-scrollbar-track {
+  background: #000000;
+}
+.theme-dark ::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+}
+.theme-dark ::-webkit-scrollbar-thumb:hover {
+  background: #ef4444;
+}
+
+.theme-light ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.theme-light ::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #dc2626;
+}
+
+/* Firefox Independent Scrollbars */
+.theme-dark * {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a #000000;
+}
+.theme-light * {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+/* Global Selection Style */
+::selection {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ffffff;
+}
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Glassmorphism Panel style adapting to Light/Dark modes */
+.glass-panel {
+  background: var(--color-card-fill);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border-main);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-dark .glass-panel:hover {
+  border-color: rgba(239, 68, 68, 0.3);
+  box-shadow: 0 15px 35px -10px rgba(239, 68, 68, 0.08);
+}
+
+.theme-light .glass-panel:hover {
+  border-color: rgba(239, 68, 68, 0.2);
+  box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.05);
+}
+
+/* Elegant Text Glowing Effect - Adapts to Dark/Light mode */
+.theme-dark .text-glow-active {
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.18) 0%, rgba(239, 68, 68, 0.04) 100%);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.35);
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  border-left: 2px solid #ef4444;
+  padding: 3px 8px;
+  border-radius: 0 6px 6px 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-light .text-glow-active {
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.1) 0%, rgba(220, 38, 38, 0.02) 100%);
+  color: #b91c1c; /* red-700 for solid light contrast */
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.15);
+  border-left: 2px solid #dc2626;
+  padding: 3px 8px;
+  border-radius: 0 6px 6px 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.text-glow-inactive {
+  color: var(--color-text-body);
+  transition: all 0.2s ease;
+}
+
+/* Shimmer Loading Animations */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.04) 20%,
+    rgba(255, 255, 255, 0.08) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: shimmer 2s infinite;
+  content: '';
+}
+
+/* Custom list items with glowing bullet points */
+.custom-list-bullet {
+  background: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+/* =========================================
+   FUTURISTIC BACKGROUNDS (CYBERNETIC GRID & GLOWS)
+   ========================================= */
+.cyber-grid {
+  position: absolute;
+  inset: 0;
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.theme-dark .cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(63, 63, 70, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(63, 63, 70, 0.05) 1px, transparent 1px);
+}
+
+.theme-light .cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(203, 213, 225, 0.25) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(203, 213, 225, 0.25) 1px, transparent 1px);
+}
+
+/* Custom Background Overlay Theme Rules */
+.theme-light .app-bg-overlay {
+  opacity: 0.03;
+}
+.theme-dark .app-bg-overlay {
+  opacity: 0.06;
+}
+
+/* Smooth Theme Transitions for the entire website */
+.theme-dark,
+.theme-light,
+.theme-dark *,
+.theme-light * {
+  transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+              border-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+              color 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              fill 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              stroke 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth custom page transitions */
+.page-transition {
+  transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), color 0.5s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Audio Player Slide-up Animation */
+@keyframes slide-up {
+  from {
+    transform: translate(-50%, 100px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

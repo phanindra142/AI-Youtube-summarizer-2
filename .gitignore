@@ -1,0 +1,20 @@
+# Node dependencies
+client/node_modules/
+client/dist/
+
+# Python virtual environment & cache
+server/venv/
+server/__pycache__/
+server/*.pyc
+
+# Local SQLite databases
+server/summarai.db
+
+# Sensitive local configurations (API keys, secrets)
+server/.env
+
+# Logs and IDE folders
+*.log
+.vscode/
+.idea/
+.DS_Store
