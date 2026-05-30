@@ -1,6 +1,21 @@
 import { useState, useEffect, useRef } from "react"
 import axios from "axios"
 import jsPDF from "jspdf"
+import { auth, db } from "../firebase"
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "firebase/auth"
+import {
+  collection,
+  doc,
+  setDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc
+} from "firebase/firestore"
 import {
   Menu,
   X,
@@ -284,17 +299,26 @@ function Home() {
     setSpeechIsTranslation(false)
   }
 
-  const loadHistory = async (token = userToken) => {
-    if (token) {
+  const loadHistory = async (currentUser = auth.currentUser) => {
+    if (currentUser) {
       try {
-        const response = await axios.get("http://127.0.0.1:5000/api/history", {
-          headers: { Authorization: `Bearer ${token}` }
+        const historyRef = collection(db, "users", currentUser.uid, "history")
+        const querySnapshot = await getDocs(historyRef)
+        const historyList = []
+        querySnapshot.forEach((docSnapshot) => {
+          historyList.push({ id: docSnapshot.id, ...docSnapshot.data() })
         })
-        if (response.data.success) {
-          setHistory(response.data.history || [])
-        }
+        historyList.sort((a, b) => {
+          const pinA = a.pinned ? 1 : 0
+          const pinB = b.pinned ? 1 : 0
+          if (pinA !== pinB) {
+            return pinB - pinA
+          }
+          return b.timestamp - a.timestamp
+        })
+        setHistory(historyList)
       } catch (err) {
-        console.error("Failed to fetch cloud history, falling back to local:", err)
+        console.error("Failed to fetch Firestore history, falling back to local:", err)
         const local = JSON.parse(localStorage.getItem("summarai-history")) || []
         setHistory(local)
       }
@@ -566,19 +590,16 @@ function Home() {
         duration: response.data.duration || 0
       }
 
-      if (userToken) {
+      if (auth.currentUser) {
         try {
-          const res = await axios.post("http://127.0.0.1:5000/api/history", historyItem, {
-            headers: { Authorization: `Bearer ${userToken}` }
-          })
-          if (res.data.success) {
-            const serverId = res.data.id
-            const syncedItem = { ...historyItem, id: serverId }
-            setHistory(prev => [syncedItem, ...prev])
-            setActiveHistoryId(serverId)
-          }
+          const historyRef = collection(db, "users", auth.currentUser.uid, "history")
+          const docRef = doc(historyRef)
+          await setDoc(docRef, historyItem)
+          const syncedItem = { ...historyItem, id: docRef.id }
+          setHistory(prev => [syncedItem, ...prev])
+          setActiveHistoryId(docRef.id)
         } catch (dbErr) {
-          console.error("Failed to save history in cloud:", dbErr)
+          console.error("Failed to save history in Cloud Firestore:", dbErr)
         }
       } else {
         const newId = Date.now()
@@ -835,14 +856,16 @@ function Home() {
     setShowQuiz(false)
   }
 
-  const migrateGuestHistoryToCloud = async (token) => {
+  const migrateGuestHistoryToCloud = async (currentUser) => {
     const guestHistory = JSON.parse(localStorage.getItem("summarai-history")) || []
     if (guestHistory.length === 0) return
 
+    const historyRef = collection(db, "users", currentUser.uid, "history")
     for (let i = 0; i < guestHistory.length; i++) {
       const item = guestHistory[i]
       try {
-        await axios.post("http://127.0.0.1:5000/api/history", {
+        const docRef = doc(historyRef)
+        await setDoc(docRef, {
           title: item.title,
           url: item.url,
           summary: item.summary,
@@ -855,11 +878,9 @@ function Home() {
           createdAt: item.createdAt,
           timestamp: item.timestamp,
           duration: item.duration || 0
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
         })
       } catch (err) {
-        console.error("Failed to migrate guest item:", item.title, err)
+        console.error("Failed to migrate guest item to Firestore:", item.title, err)
       }
     }
     localStorage.removeItem("summarai-history")
@@ -880,48 +901,43 @@ function Home() {
     }
 
     setAuthLoading(true)
-    const url = authMode === "login" ? "http://127.0.0.1:5000/login" : "http://127.0.0.1:5000/signup"
 
     try {
-      const res = await axios.post(url, {
-        email: authEmail,
-        password: authPassword
-      })
-
-      if (res.data.success) {
-        const token = res.data.token
-        const email = res.data.email
-        
-        localStorage.setItem("summarai-user-token", token)
-        localStorage.setItem("summarai-user-email", email)
-        setUserToken(token)
-        setUserEmail(email)
-        
-        setAuthEmail("")
-        setAuthPassword("")
-        setAuthConfirmPassword("")
-        setShowAuthModal(false)
-
-        await migrateGuestHistoryToCloud(token)
-        await loadHistory(token)
+      if (authMode === "login") {
+        await signInWithEmailAndPassword(auth, authEmail, authPassword)
+      } else {
+        await createUserWithEmailAndPassword(auth, authEmail, authPassword)
       }
+
+      setAuthEmail("")
+      setAuthPassword("")
+      setAuthConfirmPassword("")
+      setShowAuthModal(false)
     } catch (err) {
-      setAuthError(err.response?.data?.error || "Authentication failed")
+      let friendlyError = "Authentication failed"
+      if (err.code === "auth/email-already-in-use") {
+        friendlyError = "An account with this email already exists"
+      } else if (err.code === "auth/wrong-password" || err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+        friendlyError = "Invalid email or password"
+      } else if (err.code === "auth/weak-password") {
+        friendlyError = "Password must be at least 6 characters"
+      } else {
+        friendlyError = err.message
+      }
+      setAuthError(friendlyError)
     } finally {
       setAuthLoading(false)
     }
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     stopSpeech()
-    localStorage.removeItem("summarai-user-token")
-    localStorage.removeItem("summarai-user-email")
-    setUserToken("")
-    setUserEmail("")
-    handleClear()
-    setHistory([])
-    const guestLocal = JSON.parse(localStorage.getItem("summarai-history")) || []
-    setHistory(guestLocal)
+    try {
+      await signOut(auth)
+      handleClear()
+    } catch (err) {
+      console.error("Logout failed:", err)
+    }
   }
 
   const handlePinToggle = async (item, e) => {
@@ -932,15 +948,12 @@ function Home() {
       prev.map(x => (x.id === item.id ? { ...x, pinned: newPinnedState } : x))
     )
 
-    if (userToken) {
+    if (auth.currentUser) {
       try {
-        await axios.put(`http://127.0.0.1:5000/api/history/${item.id}`, {
-          pinned: newPinnedState
-        }, {
-          headers: { Authorization: `Bearer ${userToken}` }
-        })
+        const itemRef = doc(db, "users", auth.currentUser.uid, "history", item.id)
+        await updateDoc(itemRef, { pinned: newPinnedState })
       } catch (err) {
-        console.error("Cloud pin update failed:", err)
+        console.error("Cloud Firestore pin update failed:", err)
       }
     } else {
       const local = JSON.parse(localStorage.getItem("summarai-history")) || []
@@ -957,15 +970,12 @@ function Home() {
       prev.map(x => (x.id === item.id ? { ...x, starred: newStarredState } : x))
     )
 
-    if (userToken) {
+    if (auth.currentUser) {
       try {
-        await axios.put(`http://127.0.0.1:5000/api/history/${item.id}`, {
-          starred: newStarredState
-        }, {
-          headers: { Authorization: `Bearer ${userToken}` }
-        })
+        const itemRef = doc(db, "users", auth.currentUser.uid, "history", item.id)
+        await updateDoc(itemRef, { starred: newStarredState })
       } catch (err) {
-        console.error("Cloud star update failed:", err)
+        console.error("Cloud Firestore star update failed:", err)
       }
     } else {
       const local = JSON.parse(localStorage.getItem("summarai-history")) || []
@@ -985,15 +995,12 @@ function Home() {
     )
     setEditingId(null)
 
-    if (userToken) {
+    if (auth.currentUser) {
       try {
-        await axios.put(`http://127.0.0.1:5000/api/history/${item.id}`, {
-          title: editedTitle
-        }, {
-          headers: { Authorization: `Bearer ${userToken}` }
-        })
+        const itemRef = doc(db, "users", auth.currentUser.uid, "history", item.id)
+        await updateDoc(itemRef, { title: editedTitle })
       } catch (err) {
-        console.error("Cloud rename failed:", err)
+        console.error("Cloud Firestore rename failed:", err)
       }
     } else {
       const local = JSON.parse(localStorage.getItem("summarai-history")) || []
@@ -1010,13 +1017,12 @@ function Home() {
       handleClear()
     }
 
-    if (userToken) {
+    if (auth.currentUser) {
       try {
-        await axios.delete(`http://127.0.0.1:5000/api/history/${item.id}`, {
-          headers: { Authorization: `Bearer ${userToken}` }
-        })
+        const itemRef = doc(db, "users", auth.currentUser.uid, "history", item.id)
+        await deleteDoc(itemRef)
       } catch (err) {
-        console.error("Cloud delete failed:", err)
+        console.error("Cloud Firestore delete failed:", err)
       }
     } else {
       const local = JSON.parse(localStorage.getItem("summarai-history")) || []
@@ -1152,8 +1158,25 @@ function Home() {
   }, [speechRate, speechPitch])
 
   useEffect(() => {
-    loadHistory()
-  }, [userToken])
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setUserToken(user.uid)
+        setUserEmail(user.email)
+        localStorage.setItem("summarai-user-token", user.uid)
+        localStorage.setItem("summarai-user-email", user.email)
+        await migrateGuestHistoryToCloud(user)
+        await loadHistory(user)
+      } else {
+        setUserToken("")
+        setUserEmail("")
+        localStorage.removeItem("summarai-user-token")
+        localStorage.removeItem("summarai-user-email")
+        const guestLocal = JSON.parse(localStorage.getItem("summarai-history")) || []
+        setHistory(guestLocal)
+      }
+    })
+    return () => unsubscribe()
+  }, [])
 
   useEffect(() => {
     localStorage.setItem("summarai-theme", theme)
