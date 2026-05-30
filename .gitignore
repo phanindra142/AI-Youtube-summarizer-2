@@ -12,6 +12,9 @@ server/summarai.db
 
 # Sensitive local configurations (API keys, secrets)
 server/.env
+client/.env
+*.env
+server/firebase-key.json
 
 # Logs and IDE folders
 *.log
