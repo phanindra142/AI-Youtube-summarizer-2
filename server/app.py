@@ -19,6 +19,16 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+# Print basic configuration status (obfuscated)
+print("=== SERVER INITIALIZATION ===")
+openrouter_key = os.getenv("OPENROUTER_API_KEY")
+print(f"OPENROUTER_API_KEY status: {'Loaded (ends in ...' + openrouter_key[-5:] + ')' if openrouter_key else 'Missing'}")
+http_proxy = os.getenv("HTTP_PROXY")
+https_proxy = os.getenv("HTTPS_PROXY")
+print(f"HTTP_PROXY status: {'Configured' if http_proxy else 'Not Configured'}")
+print(f"HTTPS_PROXY status: {'Configured' if https_proxy else 'Not Configured'}")
+print("=============================")
+
 # =========================================
 # YOUTUBE HELPERS
 # =========================================
@@ -65,6 +75,52 @@ def extract_text_from_snippets(snippets_data):
             text_parts.append(str(item))
     return " ".join(text_parts)
 
+def get_transcript_list_with_fallback(video_id):
+    # Try direct connection first
+    try:
+        print(f"[DEBUG] [Direct Fetch] Attempting direct fetch for video {video_id}...")
+        return YouTubeTranscriptApi().list(video_id)
+    except Exception as direct_err:
+        print(f"[WARNING] [Direct Fetch] Failed: {direct_err}. Retrying with proxy rotation...")
+        
+        # Fetch active free proxies
+        try:
+            url = 'https://proxylist.geonode.com/api/proxy-list?limit=150&page=1&sort_by=lastChecked&sort_type=desc'
+            r = requests.get(url, timeout=10)
+            data = r.json().get('data', [])
+        except Exception as api_err:
+            print(f"[ERROR] [Proxy Fallback] Failed to fetch proxy list from Geonode: {api_err}")
+            raise direct_err
+            
+        http_proxies = []
+        for x in data:
+            ip = x.get('ip')
+            port = x.get('port')
+            protocols = x.get('protocols', [])
+            if 'http' in protocols or 'https' in protocols:
+                http_proxies.append(f"http://{ip}:{port}")
+                
+        print(f"[DEBUG] [Proxy Fallback] Found {len(http_proxies)} HTTP proxies. Iterating top 30...")
+        
+        last_err = direct_err
+        for i, proxy in enumerate(http_proxies[:30]):
+            print(f"[DEBUG] [Proxy Fallback] Trying proxy {i+1}/30: {proxy} ...")
+            try:
+                session = requests.Session()
+                session.proxies = {
+                    "http": proxy,
+                    "https": proxy
+                }
+                api = YouTubeTranscriptApi(http_client=session)
+                result = api.list(video_id)
+                print(f"[SUCCESS] [Proxy Fallback] Successfully fetched transcript list using proxy: {proxy}")
+                return result
+            except Exception as e:
+                print(f"[DEBUG] [Proxy Fallback] Proxy {proxy} failed: {e}")
+                last_err = e
+                
+        raise last_err
+
 def fetch_best_transcript(video_id):
     """
     Fetches the best transcript available for a video based on priorities:
@@ -76,7 +132,7 @@ def fetch_best_transcript(video_id):
     """
     print(f"[DEBUG] Fetching transcript list for video ID: {video_id}")
     try:
-        transcript_list = YouTubeTranscriptApi().list(video_id)
+        transcript_list = get_transcript_list_with_fallback(video_id)
     except TranscriptsDisabled as e:
         print(f"[ERROR] Transcripts are disabled for video {video_id}: {e}")
         return {"success": False, "error": "Transcripts are disabled for this video.", "available_languages": []}
@@ -266,19 +322,23 @@ def call_openrouter(prompt, system_message=""):
 # =========================================
 @app.route("/summarize", methods=["POST"])
 def summarize():
+    print("[LOG] [/summarize] Request received")
     data = request.get_json()
     youtube_url = data.get("url")
     mode = data.get("mode")
+    print(f"[LOG] [/summarize] URL received: {youtube_url} | Mode: {mode}")
 
     try:
         video_id = extract_video_id(youtube_url)
         if not video_id:
-            print(f"[ERROR] Invalid YouTube URL provided: {youtube_url}")
+            print(f"[ERROR] [/summarize] Invalid YouTube URL: {youtube_url}")
             return {"success": False, "error": "Invalid YouTube URL"}, 400
 
+        print(f"[LOG] [/summarize] Transcript fetch started for video: {video_id}")
         # FETCH TRANSCRIPT
         transcript_res = fetch_best_transcript(video_id)
         if not transcript_res["success"]:
+            print(f"[ERROR] [/summarize] Transcript fetch failed: {transcript_res['error']}")
             return {
                 "success": False,
                 "error": transcript_res["error"],
@@ -353,7 +413,9 @@ Transcript:
 """
 
         # Call OpenRouter using our robust fallback engine
+        print("[LOG] [/summarize] OpenRouter request started")
         full_response = call_openrouter(prompt)
+        print("[LOG] [/summarize] OpenRouter response received")
         
         summary = full_response
         smart_title = "YouTube Video Summary"
@@ -390,6 +452,7 @@ Transcript preview:
 
         thumbnail = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
 
+        print("[LOG] [/summarize] Final response returned successfully")
         return {
             "success": True,
             "video_id": video_id,
@@ -410,12 +473,14 @@ Transcript preview:
 # =========================================
 @app.route("/summarize_multi", methods=["POST"])
 def summarize_multi():
+    print("[LOG] [/summarize_multi] Request received")
     data = request.get_json()
     urls = data.get("urls", [])
     mode = data.get("mode")
+    print(f"[LOG] [/summarize_multi] URLs received: {urls} | Mode: {mode}")
 
     if not urls:
-        print("[ERROR] summarize_multi called without urls")
+        print("[ERROR] [/summarize_multi] summarize_multi called without urls")
         return {"success": False, "error": "No URLs provided"}, 400
 
     try:
@@ -425,17 +490,18 @@ def summarize_multi():
         for url in urls:
             video_id = extract_video_id(url)
             if not video_id:
-                print(f"[WARNING] Invalid URL skipped in multi-video: {url}")
+                print(f"[WARNING] [/summarize_multi] Invalid URL skipped: {url}")
                 continue
             
-            print(f"[DEBUG] Fetching multi-video transcript for: {video_id}")
+            print(f"[LOG] [/summarize_multi] Fetching transcript for: {video_id}")
             transcript_res = fetch_best_transcript(video_id)
             if transcript_res["success"]:
+                print(f"[LOG] [/summarize_multi] Transcript fetch success for: {video_id}")
                 combined_transcripts.append(f"Video ({video_id}): {transcript_res['transcript']}")
                 total_duration += transcript_res.get("duration", 0)
             else:
                 err_msg = transcript_res["error"]
-                print(f"[ERROR] Failed to fetch transcript for {video_id} in multi-video: {err_msg}")
+                print(f"[ERROR] [/summarize_multi] Failed to fetch transcript for {video_id}: {err_msg}")
                 all_errors.append(f"Video ({video_id}): {err_msg}")
                 continue
 
@@ -494,7 +560,9 @@ Transcripts:
 """
 
         # Call OpenRouter using our robust fallback engine
+        print("[LOG] [/summarize_multi] OpenRouter request started")
         full_response = call_openrouter(prompt)
+        print("[LOG] [/summarize_multi] OpenRouter response received")
         
         summary = full_response
         quiz = []
@@ -528,6 +596,7 @@ Transcripts preview:
         first_video_id = extract_video_id(urls[0])
         thumbnail = f"https://img.youtube.com/vi/{first_video_id}/hqdefault.jpg" if first_video_id else ""
 
+        print("[LOG] [/summarize_multi] Final response returned successfully")
         return {
             "success": True,
             "video_id": first_video_id or "multi",
@@ -548,11 +617,14 @@ Transcripts preview:
 # =========================================
 @app.route("/translate", methods=["POST"])
 def translate_text():
+    print("[LOG] [/translate] Request received")
     data = request.get_json()
     text = data.get("text")
     language = data.get("language")
+    print(f"[LOG] [/translate] Language: {language} | Text length: {len(text) if text else 0}")
 
     if not text or not language:
+        print("[ERROR] [/translate] Text or language is missing")
         return {"success": False, "error": "Text and language are required"}, 400
 
     try:
@@ -563,7 +635,9 @@ Keep the meaning accurate and natural. Do not add any conversational commentary.
 Text:
 {text}
 """
+        print("[LOG] [/translate] OpenRouter request started")
         translated_text = call_openrouter(prompt)
+        print("[LOG] [/translate] OpenRouter response received")
         return {
             "success": True,
             "translated_text": translated_text
