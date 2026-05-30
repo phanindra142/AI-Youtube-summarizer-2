@@ -70,6 +70,8 @@ const HeaderIcon = ({ name, className = "w-5 h-5 text-red-400 font-sans" }) => {
   }
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000"
+
 function Home() {
   // ==========================================
   // STATE INITIALIZATIONS
@@ -557,12 +559,12 @@ function Home() {
     try {
       let response
       if (urls.length === 1) {
-        response = await axios.post("http://127.0.0.1:5000/summarize", {
+        response = await axios.post(`${API_BASE_URL}/summarize`, {
           url: urls[0],
           mode: mode
         })
       } else {
-        response = await axios.post("http://127.0.0.1:5000/summarize_multi", {
+        response = await axios.post(`${API_BASE_URL}/summarize_multi`, {
           urls: urls,
           mode: mode
         })
@@ -813,7 +815,7 @@ function Home() {
 
     setTranslationLoading(true)
     try {
-      const response = await axios.post("http://127.0.0.1:5000/translate", {
+      const response = await axios.post(`${API_BASE_URL}/translate`, {
         text: summary,
         language: selectedLanguage
       })
